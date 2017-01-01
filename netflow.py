@@ -75,15 +75,36 @@ class Hosts:
         self.ips[src_ip].addTxTraffic(count, octet, last_seen)
         self.ips[dst_ip].addRxTraffic(count, octet, last_seen)
 
+    def analyzeTraffic(self, src_port, dst_ip, dst_port, protocol):
+        protocols = {1: 'ICMP', 6: 'TCP', 17: 'UDP'}
+        print("layer 4 protocol is ", end="")
+        if protocol in protocols:
+            print(protocols[protocol])
+        else:
+            print("unknown")
+
+        ports = {
+            20: 'ftp data', 21: 'ftp ctl', 22: 'ssh', 23: 'telnet', 25: 'SMTP', 53: 'DNS', 67: 'DHCP', 68: 'DHCP',
+            69: 'tftp', 80: 'http', 110: 'POP3', 123: 'NTP', 389: 'LDAP', 443: 'https', 1194: 'OpenVPN', 8080: 'http_alt'
+        }
+        if dst_port in ports:
+            print("des: layer 5 protocol is", ports[dst_port])
+        if src_port in ports:
+            print("src: layer 5 protocol is ", ports[src_port])
+
+
+
 # Simple traffic accounting
-listen_ip = '127.0.0.1'
-listen_port = 2055
+LISTEN_IP = '127.0.0.1'
+LISTEN_PORT = 2055
+UDP_RECV_BUFFER_SIZE = 1024
+
 udpsocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-udpsocket.bind((listen_ip, listen_port))
+udpsocket.bind((LISTEN_IP, LISTEN_PORT))
 
 hosts = Hosts()
 while True:
-    packet, (ip, port) = udpsocket.recvfrom(1024)
+    packet, (ip, port) = udpsocket.recvfrom(UDP_RECV_BUFFER_SIZE)
     print("recv from {}:{}".format(ip, port))
 
     try:
@@ -94,9 +115,10 @@ while True:
 
     for flow in nf.flows:
         hosts.accountTraffic(flow.src_ip, flow.dst_ip, flow.packet_count, flow.packet_octet, nf.header['utimestamp'])
+        hosts.analyzeTraffic(flow.src_port, flow.dst_ip, flow.dst_port, flow.protocol)
 
     for ip, flow in hosts.ips.items():
         tx_percent = flow.tx_octet / (flow.tx_octet + flow.rx_octet) * 100
-        print('{:<15} total_bytes:{:<10d} Tx {:<2.2f}% Rx {:<2.2f}%, last seen:{}'.format(
+        print('{:<15} total transfer bytes:{:<10d} Tx {:<2.2f}% Rx {:<2.2f}%, last seen:{}'.format(
         ip, flow.tx_octet + flow.rx_octet, tx_percent, 100 - tx_percent, datetime.fromtimestamp(flow.last_seen).strftime('%Y-%m-%d %H:%M:%S')
         ))
